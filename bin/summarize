@@ -1,0 +1,75 @@
+#!/bin/bash
+# Add a check to ensure that this isn't run on logins/RED
+
+MODEL_PATH="$QUANTIZED_MODEL_PATH"
+
+usage() {
+    echo "summarize is a utility that leverages the Llama2 LLM to summarize either a single text document, or a directory of documents. .txt files or equivalent preferred."
+    echo "Options:"
+    echo " -h , --help        Display  this help message."
+    echo " -f , --file        FILE Summarize a single text document and generates a prepared template."
+    echo " -p , --prepared    FILE Summarize a single text that already contains template"
+    echo " -d , --directory   DIRPATH Summarize all text files in directory."
+
+}
+
+#instruction_sf = $'### Instruction:\n
+                #Summarize the following text:\n
+                ### Input:\n'
+
+#instruction_multi = $'### Instruction:\n
+                #Summarize the following texts:\n
+                ###  : '\n
+
+
+
+
+if ( [[ $(nvidia-smi | grep "CUDA Version") =~ "CUDA Version" ]] )  &> /dev/null ; then
+    while [ $# -gt 0 ]; do
+        case $1 in 
+            -h | --help)
+                usage
+                exit 0
+                ;;
+            -f | --file)
+                files="$2"
+                echo "### Instruction:" > template_file.txt
+                echo "Summarize the following text:" >> template_file.txt
+                echo "### Input:" >> template_file.txt
+                cat $files >> template_file.txt 
+                echo "### Response:" >> template_file.txt
+                main -m $MODEL_PATH/llama-2-13b-chat/ggml-model-Q4_K_M.gguf -t 12 -ngl 41 -n 1500 -c 8192 --rope-scale 2 --log-new -f template_file.txt 2> /dev/null
+                shift
+                ;;
+            -p | --prepared)
+                # Single-File mode
+                files="$2"
+
+                main -m $MODEL_PATH/llama-2-13b-chat/ggml-model-Q4_K_M.gguf -t 12 -ngl 41 -n 1500 -c 8192 --rope-scale 2 --log-new -f $files 2> /dev/null
+                shift
+                ;;
+            -d | --directory)
+                echo "Summary in Progress"
+                targetdir="$2"
+                echo "### Instruction:" > template_file.txt
+                echo "Summarize the following multiple texts:" >> template_file.txt
+                echo "### Input:" >> template_file.txt
+                #cat $targetdir/*.txt >> template_file.txt
+                filecount=1
+                for file in $targetdir/*.txt ; do
+                    echo "### FILE $filecount" >> template_file.txt
+                    cat $file >> template_file.txt
+                    (( filecount++ ))
+                    done
+                echo "### Response:" >> template_file.txt
+                main -m $MODEL_PATH/llama-2-13b-chat/ggml-model-Q4_K_M.gguf -t 12 -ngl 41 -n 1500 -c 8192 --rope-scale 2 --log-new -f template_file.txt 2> /dev/null
+
+                shift
+                ;;
+        esac
+        shift
+    done
+else
+    echo "Please run this inside a job on a GPU node by using:"
+    echo "srun -A staff -p gpu-debug --time 1:00:00 --gpus 1 --cpus-per-task 16 --mem 100G --x11 --pty bash"
+fi

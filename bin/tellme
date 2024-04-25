@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Wrap prompt to make it feel organic
+
+MODEL_PATH="$QUANTIZED_MODEL_PATH"
+args="$@"
+echo "--- Press Control+C to Interject, Press Return to return control."
+# Determine if on a GPU node
+if ( [[ $(nvidia-smi | grep "CUDA Version") =~ "CUDA Version" ]] )  &> /dev/null ; then 
+    module load hpc_llm/gpu/.1.0
+    main -m $MODEL_PATH/llama-2-7b-chat/ggml-model-Q4_K_M.gguf -n -2 -ngl 33 --color --interactive -p "'$args'" 2> /dev/null
+else
+    module load hpc_llm/.1.0
+    main -m $MODEL_PATH/llama-2-7b-chat/ggml-model-Q4_K_M.gguf -n 500 -t 4 --color --interactive -p "'$args'" 2> /dev/null
+fi
+
